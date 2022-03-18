@@ -1,3 +1,4 @@
+from copy import error
 from datetime import datetime
 
 import django_filters
@@ -6,7 +7,7 @@ from graphene import relay, ObjectType, List
 from graphene_django import DjangoObjectType
 from graphene_django.filter import DjangoFilterConnectionField
 from graphene_file_upload.scalars import Upload
-from graphql_relay import from_global_id
+from graphql_relay import from_global_id, to_global_id
 from .models import *
 
 
@@ -35,6 +36,7 @@ class RoleNode(DjangoObjectType):
         model = Role
         filter_fields = ['id']
         interfaces = (relay.Node,)
+        connection_class = ExtendedConnection
 
 
 class UserFilter(django_filters.FilterSet):
@@ -60,6 +62,7 @@ class UserNode(DjangoObjectType):
         model = User
         filterset_class = UserFilter
         interfaces = (relay.Node,)
+        connection_class = ExtendedConnection
 
 
 class BimeGozarNode(DjangoObjectType):
@@ -67,6 +70,7 @@ class BimeGozarNode(DjangoObjectType):
         model = BimeGozar
         filter_fields = ['id', 'name', 'code']
         interfaces = (relay.Node,)
+        connection_class = ExtendedConnection
 
 
 class BimeGarNode(DjangoObjectType):
@@ -74,6 +78,7 @@ class BimeGarNode(DjangoObjectType):
         model = BimeGar
         filter_fields = ['id', 'name', 'code']
         interfaces = (relay.Node,)
+        connection_class = ExtendedConnection
 
 
 class HazineCategoryNode(DjangoObjectType):
@@ -81,6 +86,7 @@ class HazineCategoryNode(DjangoObjectType):
         model = HazineCategory
         filter_fields = ['id', 'name', 'code']
         interfaces = (relay.Node,)
+        connection_class = ExtendedConnection
 
 
 class HazineNode(DjangoObjectType):
@@ -88,6 +94,7 @@ class HazineNode(DjangoObjectType):
         model = Hazine
         filter_fields = ['id', 'name', 'code']
         interfaces = (relay.Node,)
+        connection_class = ExtendedConnection
 
 
 class GharardadNode(DjangoObjectType):
@@ -95,6 +102,7 @@ class GharardadNode(DjangoObjectType):
         model = Gharardad
         filter_fields = ['id', 'name', 'code', 'expire_date']
         interfaces = (relay.Node,)
+        connection_class = ExtendedConnection
 
     def resolve_file(self, info):
         """Resolve product image absolute path"""
@@ -108,6 +116,7 @@ class HazineGharardadNode(DjangoObjectType):
         model = HazineGharardad
         filter_fields = ['id']
         interfaces = (relay.Node,)
+        connection_class = ExtendedConnection
 
 
 class BimeShavanadeGharardadNode(DjangoObjectType):
@@ -115,6 +124,7 @@ class BimeShavanadeGharardadNode(DjangoObjectType):
         model = BimeShavanadeGharardad
         filter_fields = ['id']
         interfaces = (relay.Node,)
+        connection_class = ExtendedConnection
 
 
 class BimeShavandeGharardadHazineNode(DjangoObjectType):
@@ -122,6 +132,7 @@ class BimeShavandeGharardadHazineNode(DjangoObjectType):
         model = BimeShavandeGharardadHazine
         filter_fields = ['id']
         interfaces = (relay.Node,)
+        connection_class = ExtendedConnection
 
 
 class PazireshFilter(django_filters.FilterSet):
@@ -160,6 +171,7 @@ class PazireshFileNode(DjangoObjectType):
         model = PazireshFile
         filter_fields = ['id']
         interfaces = (relay.Node,)
+        connection_class = ExtendedConnection
 
     def resolve_file(self, info):
         """Resolve product image absolute path"""
@@ -348,6 +360,108 @@ class ChangePasswordMutation(graphene.Mutation):
             user.set_password(new_password)
             user.save()
         return ChangePasswordMutation(status=status)
+
+# add users mutation
+
+
+class AddUserInput (graphene.InputObjectType):
+    first_name = graphene.String()
+    last_name = graphene.String()
+    age = graphene.Int()
+    melliCode = graphene.String()
+    is_asli = graphene.Boolean()
+    role = graphene.String()
+    is_active = graphene.Boolean()
+
+
+class AddUserMutation(graphene.Mutation):
+    class Arguments:
+        input = AddUserInput(required=True)
+
+    id = graphene.ID()
+    success = graphene.Boolean()
+    error = graphene.String()
+
+    @classmethod
+    def mutate(cls, root, info, input, **kwargs):
+        try:
+            role = Role.objects.filter(name=input.role).first()
+            user = User.objects.create_user(
+                input.first_name, input.last_name, input.melliCode, age=input.age, is_asli=input.is_asli, role=role, is_active=input.is_active)
+            if input.role == "karshenas":
+                user.is_karshenas = True
+                user.save()
+            if input.role == "arzyab":
+                user.is_arzyab = True
+                user.save()
+            success = True
+            id = to_global_id("UserNode", user.id)
+            error = ''
+        except Exception as e:
+            success = False
+            id = None
+            error = str(e)
+        return AddUserMutation(success=success, id=id, error=error)
+
+
+class EditUserInput (graphene.InputObjectType):
+    first_name = graphene.String()
+    last_name = graphene.String()
+    age = graphene.Int()
+    melliCode = graphene.String()
+    is_asli = graphene.Boolean()
+    role = graphene.String()
+    is_active = graphene.Boolean()
+
+
+class EditUserMutation(graphene.Mutation):
+    class Arguments:
+        input = EditUserInput(required=True)
+
+    success = graphene.Boolean()
+    id = graphene.ID()
+    error = graphene.String()
+
+    @classmethod
+    def mutate(cls, root, info, input, **kwargs):
+        try:
+            user = User.objects.get(pk=from_global_id(input.id)[1])
+            role = Role.objects.filter(name=input.role).first()
+            user.first_name = input.first_name
+            user.last_name = input.last_name
+            user.age = input.age
+            user.melliCode = input.melliCode
+            user.is_asli = input.is_asli
+            user.role = role
+            user.is_active = input.is_active
+            user.save()
+            if input.role == "karshenas":
+                user.is_karshenas = True
+                user.save()
+            if input.role == "arzyab":
+                user.is_arzyab = True
+                user.save()
+            success = True
+            id = to_global_id("UserNode", user.id)
+            error = ''
+        except Exception as e:
+            success = False
+            id = None
+            error = str(e)
+        return EditUserMutation(success=success, id=id, error=error)
+
+
+class DeleteUserMutation(graphene.Mutation):
+    class Arguments:
+        id = graphene.ID()
+
+    success = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, id, **kwargs):
+        user = User.objects.get(pk=from_global_id(id)[1])
+        user.delete()
+        return DeleteUserMutation(success=True)
 
 
 class UploadTest(graphene.Mutation):
